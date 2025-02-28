@@ -191,6 +191,8 @@ extern "C" {
 #undef  HAVE_WC_INTROSPECTION
 #define HAVE_WC_INTROSPECTION
 
+#undef WOLFSSL_AES_DIRECT   
+#define WOLFSSL_AES_DIRECT
 
 #ifdef __cplusplus
 }

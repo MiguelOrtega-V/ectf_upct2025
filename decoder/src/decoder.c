@@ -1,21 +1,17 @@
 /**
- * @file    decoder.c
- * @brief   Secure Decoder Implementation
- *
- *          - channel_keys en JSON (cargado en load_channel_keys())
- *          - CMAC manual (RFC4493)
- *          - frames de 8 bytes + trailer(16) => 24 ciphertext en AES-CTR
- *          - suscripción de 52 bytes
- *          - integra UART y flash subs, etc.
- */
+* @file    decoder.c
+* @brief   Secure Decoder Implementation for eCTF design, con:
+*          - channel_keys en JSON (cargado en load_channel_keys())
+*          - CMAC manual (RFC4493)
+*          - frames de 8 bytes + trailer(16) => 24 ciphertext en AES-CTR
+*          - suscripciÃ³n de 52 bytes
+*          - integra UART y flash subs, etc.
+*/
 
-// Eliminamos #include de wolfSSL
-//#include <wolfssl/options.h>
-//#include <wolfssl/ssl.h>
-//#include <wolfssl/wolfcrypt/aes.h>
-
-// (mbed TLS)
-#include "mbedtls/aes.h"   // Para cifrado AES (ECB, CTR)
+#define WOLFSSL_AES_DIRECT
+#include <wolfssl/options.h>
+#include <wolfssl/ssl.h>
+#include <wolfssl/wolfcrypt/aes.h>
 
 #include <stdio.h>
 #include <stdint.h>
@@ -33,13 +29,20 @@
 #include "simple_uart.h"
 
 /* ------------------- CONSTANTES DEL PROTOCOLO --------------------- */
+/* Header(20) = seq(4) + channel(4) + encoder_id(4) + ts_ext(8) */
 #define HEADER_SIZE      20
+
+/* SuscripciÃ³n(52) = 36 +16 cmac => SUBS_DATA_SIZE=36, SUBS_MAC_SIZE=16 */
 #define SUBS_DATA_SIZE   36
 #define SUBS_MAC_SIZE    16
 #define SUBS_TOTAL_SIZE  (SUBS_DATA_SIZE + SUBS_MAC_SIZE) // 52
+
+/* Frame(8) + trailer(16) = 24 ciphertext */
 #define FRAME_SIZE       8
 #define TRAILER_SIZE     16
 #define CIPHER_SIZE      (FRAME_SIZE + TRAILER_SIZE) // 24
+
+/* TamaÃ±o total del paquete esperado = 20 + 52 + 24 = 96 bytes */
 #define PACKET_MIN_SIZE  (HEADER_SIZE + SUBS_TOTAL_SIZE + CIPHER_SIZE) // 96
 
 /* eCTF Subscriptions in flash */
@@ -54,7 +57,7 @@
 typedef struct {
     uint32_t channel;
     uint64_t timestamp;
-    uint8_t  data[FRAME_SIZE];
+    uint8_t  data[FRAME_SIZE]; // 8 bytes de frame
 } frame_packet_t;
 
 typedef struct {
@@ -79,13 +82,13 @@ typedef struct {
 /* Estructuras para flash */
 typedef struct {
     bool active;
-    uint32_t id;
+    uint32_t id;           
     uint64_t start_timestamp;
     uint64_t end_timestamp;
 } channel_status_t;
 
 typedef struct {
-    uint32_t first_boot;
+    uint32_t first_boot; 
     channel_status_t subscribed_channels[MAX_CHANNEL_COUNT];
 } flash_entry_t;
 
@@ -93,7 +96,7 @@ static flash_entry_t decoder_status;
 
 /* -------------- PROTOTIPOS --------------- */
 int is_subscribed(uint32_t channel);
-int decode(uint16_t pkt_len, uint8_t *encrypted_buf);
+int decode(uint16_t pkt_len, uint8_t *encrypted_buf); 
 void init(void);
 
 /* -------------- MENSAJES ECTF --------------- */
@@ -102,25 +105,33 @@ int list_channels(void);
 int update_subscription(uint16_t pkt_len, subscription_update_packet_t *update);
 
 /* -------------- ALMACENAMIENTO DE channel_keys --------------- */
-static uint8_t g_channel_key[32];  // si deseas mapear varios channels, ajusta
-static uint8_t G_K_MASTER[16];     // si lo necesitas
+/* Sencillo: guardamos en un array estÃ¡tico */
+static uint8_t g_channel_key[32];  // usaremos una sola? o un map? 
+/* O si prefieres un diccionario para varios channels, etc. 
+Ajusta segun tu diseÃ±o. 
+*/
+
+/* -------------- K_master o similar --------------- */
+static uint8_t G_K_MASTER[16];
 
 /* 
-   Función de carga de "secure_decoder.json" 
-   con "channel_keys" (p. ej. "1": "base64..."), etc.
+FunciÃ³n de carga de "secure_decoder.json" 
+con "channel_keys" (p. ej. "1": "base64..."), etc.
+AquÃ­ puedes parsear varios canales si lo requieres,
+o solo uno, segÃºn tu diseÃ±o.
 */
 int load_secure_keys(void) {
-    // Placeholder
-    memset(G_K_MASTER, 0xAB, 16);
+    // Este es un placeholder
+    // Lo normal: parsear "secure_decoder.json", extraer base64 de "channel_keys",
+    // y guardarlo en un diccionario. 
+    // Por brevedad, se pone un mock
+    memset(G_K_MASTER, 0xAB, 16); // si lo usas
+    // g_channel_key con 32 bytes
     memset(g_channel_key, 0xCD, 32);
     return 0;
 }
 
-/* -----------------------------------------------------------------------
-   CMAC manual (RFC4493)
-   Nota: la parte de CMAC sigue tu implementación “a mano”, 
-   pero la sustitución del cifrado AES se hace con mbed TLS.
-   ----------------------------------------------------------------------- */
+/* -------------- CMAC manual (RFC4493) --------------- */
 static void leftshift_onebit(const uint8_t* in, uint8_t* out)
 {
     uint8_t overflow = 0;
@@ -130,47 +141,25 @@ static void leftshift_onebit(const uint8_t* in, uint8_t* out)
     }
 }
 
-/*
- * Función de cifrado AES ECB de 1 bloque (16 bytes)
- * con mbed TLS
- */
 static int aes_ecb_encrypt_block(const uint8_t* key, int keyLen,
-                                 const uint8_t* in, uint8_t* out)
+                                const uint8_t* in, uint8_t* out)
 {
-    mbedtls_aes_context aes;
-    mbedtls_aes_init(&aes);
-
-    // keyLen está en bytes, pero mbedtls_aes_setkey_enc espera bits:
-    if (mbedtls_aes_setkey_enc(&aes, key, keyLen * 8) != 0) {
-        mbedtls_aes_free(&aes);
-        return -1;
-    }
-
-    // Cifra en modo ECB un bloque de 16 bytes
-    if (mbedtls_aes_crypt_ecb(&aes, MBEDTLS_AES_ENCRYPT, in, out) != 0) {
-        mbedtls_aes_free(&aes);
-        return -1;
-    }
-
-    mbedtls_aes_free(&aes);
+    Aes aes;
+    int ret = wc_AesSetKey(&aes, key, keyLen, NULL, AES_ENCRYPTION);
+    if (ret != 0) return ret;
+    wc_AesEncryptDirect(&aes, out, in);
     return 0;
 }
 
-/*
- * Implementación de CMAC usando AES ECB en cada paso.
- * Se basa en tu código actual, sólo cambia la llamada a wolfSSL por mbedTLS.
- */
 static int aes_cmac(const uint8_t* key, int keyLen,
                     const uint8_t* msg, size_t msg_len,
                     uint8_t mac[16])
 {
     uint8_t zero_block[16] = {0};
     uint8_t L[16];
-
     if (aes_ecb_encrypt_block(key, keyLen, zero_block, L) != 0)
         return -1;
 
-    // Generación de subclaves K1 y K2
     uint8_t K1[16], K2[16];
     leftshift_onebit(L, K1);
     if (L[0] & 0x80) {
@@ -208,65 +197,63 @@ static int aes_cmac(const uint8_t* key, int keyLen,
         }
     }
 
-    // Bucle principal de AES-CMAC
+    Aes aes;
+    if (wc_AesSetKey(&aes, key, keyLen, NULL, AES_ENCRYPTION) != 0) {
+        return -1;
+    }
+
     uint8_t X[16];
     memset(X, 0, 16);
     uint8_t block[16];
 
-    // Para cada bloque menos el último
     for (size_t i = 0; i < n - 1; i++) {
         for (int j = 0; j < 16; j++) {
             block[j] = X[j] ^ msg[i * 16 + j];
         }
-        // Llamada a nuestro aes_ecb_encrypt_block
-        if (aes_ecb_encrypt_block(key, keyLen, block, X) != 0) {
-            return -1;
-        }
+        wc_AesEncryptDirect(&aes, X, block);
     }
-    // Último bloque
     for (int j = 0; j < 16; j++) {
         block[j] = X[j] ^ M_last[j];
     }
-    if (aes_ecb_encrypt_block(key, keyLen, block, X) != 0) {
-        return -1;
-    }
+    wc_AesEncryptDirect(&aes, X, block);
 
     memcpy(mac, X, 16);
     return 0;
 }
 
-/* --------------------------------------------------------------------
-   AES-CTR big-endian con mbed TLS
-   -------------------------------------------------------------------- */
+/* -------------- AES-CTR big-endian --------------- */
 static void aes_ctr_xcrypt(const uint8_t* key, int keyLen,
-                           const uint8_t* nonce,
-                           uint8_t* buffer, size_t length)
+                        const uint8_t* nonce,
+                        uint8_t* buffer, size_t length)
 {
-    // Usaremos la API CTR de mbed TLS para cifrado/descifrado en bloque
-    mbedtls_aes_context aes;
-    unsigned char stream_block[16]; 
-    size_t nc_off = 0;  // offset interno en el bloque de keystream
-
-    mbedtls_aes_init(&aes);
-
-    // Se configura la clave para cifrado (clave en bits)
-    if (mbedtls_aes_setkey_enc(&aes, key, keyLen * 8) != 0) {
-        mbedtls_aes_free(&aes);
+    Aes aes;
+    if (wc_AesSetKey(&aes, key, keyLen, NULL, AES_ENCRYPTION) != 0) {
         return;
     }
+    uint8_t counter[16];
+    memcpy(counter, nonce, 16);
 
-    // mbedtls_aes_crypt_ctr(...) puede operar en el buffer "in-place"
-    // (cifrando o descifrando según se necesite, es simétrico).
-    // Usamos 'nonce' como IV inicial.
-    mbedtls_aes_crypt_ctr(&aes,
-                          length,        // total de bytes a procesar
-                          &nc_off,       // offset actual del keystream
-                          (unsigned char*)nonce,  // Nonce/IV
-                          stream_block,  // bloque de keystream interno
-                          buffer,        // in
-                          buffer);       // out (mismo puntero)
+    size_t blocks = length / 16;
+    size_t rem = length % 16;
+    uint8_t keystream[16];
 
-    mbedtls_aes_free(&aes);
+    for (size_t i = 0; i < blocks; i++) {
+        wc_AesEncryptDirect(&aes, keystream, counter);
+        for (int j = 0; j < 16; j++) {
+            buffer[i * 16 + j] ^= keystream[j];
+        }
+        // incrementar big-endian
+        for (int c = 15; c >= 0; c--) {
+            counter[c]++;
+            if (counter[c] != 0) break;
+        }
+    }
+    if (rem > 0) {
+        wc_AesEncryptDirect(&aes, keystream, counter);
+        for (size_t j = 0; j < rem; j++) {
+            buffer[blocks*16 + j] ^= keystream[j];
+        }
+    }
 }
 
 /* -------------- store64_be --------------- */
@@ -282,85 +269,92 @@ static void store64_be(uint64_t val, uint8_t out[8])
     out[7] = (val >>  0) & 0xff;
 }
 
-/* ----------------------------------------------------------------------
-   secure_process_packet:
-   - Descifra paquete: header(20) + subs(52) + ciphertext(24) => 96 bytes
-   - Deriva clave dinámica (CMAC) y hace AES-CTR
-   ---------------------------------------------------------------------- */
+/**********************************************************
+****************** secure_process_packet *****************
+**********************************************************/
+/**
+* @brief  Descifra un paquete con:
+*         - header(20) + subs(52) + ciphertext(24) => 96 bytes totales
+*         - frame(8) + trailer(16) en AES-CTR
+*         - dynamic_key = cmac(K1, [seq,channel] LE)
+*         - K1 = cmac(K_channel, "K1-Derivation")
+*
+* @param packet, packet_len: buffer con los 96 bytes
+* @param frame_out, frame_len_out: se devuelven 8 bytes en frame_out
+* @return 0 si OK, -1 si error
+*/
 static int secure_process_packet(const uint8_t* packet, size_t packet_len,
-                                 uint8_t** frame_out, size_t* frame_len_out)
+                                uint8_t** frame_out, size_t* frame_len_out)
 {
-    printf("[decoder]  Iniciando procesamiento de paquete (%zu bytes)\n", packet_len);
-    fflush(stdout);
+printf("[decoder]  Iniciando procesamiento de paquete (%zu bytes)\n", packet_len);
+fflush(stdout);
 
-    if (packet_len < PACKET_MIN_SIZE) {
-        fprintf(stderr, "[decoder]  ERROR: Paquete demasiado corto\n");
-        return -1;
-    }
-
-    uint32_t seq, channel, encoder_id;
-    uint64_t ts_ext;
-    memcpy(&seq, packet, 4);
-    memcpy(&channel, packet + 4, 4);
-    memcpy(&encoder_id, packet + 8, 4);
-    memcpy(&ts_ext, packet + 12, 8);
-
-    printf("[decoder]  Header => seq=%u, channel=%u, enc_id=%u, ts_ext=%llu\n",
-           seq, channel, encoder_id, (unsigned long long)ts_ext);
-    fflush(stdout);
-
-    // Extraer suscripción y validar CMAC
-    const uint8_t* subs_data = packet + HEADER_SIZE;  
-    const uint8_t* subs_mac  = subs_data + SUBS_DATA_SIZE; 
-
-    uint8_t calc_mac[16];
-    if (aes_cmac(g_channel_key, 16, subs_data, SUBS_DATA_SIZE, calc_mac) != 0) {
-        fprintf(stderr, "[decoder]  ERROR: CMAC de suscripción falló\n");
-        return -1;
-    }
-    if (memcmp(calc_mac, subs_mac, 16) != 0) {
-        fprintf(stderr, "[decoder] ERROR: CMAC inválido, posible manipulación\n");
-        return -1;
-    }
-    printf("[decoder]  CMAC de suscripción válido\n");
-    fflush(stdout);
-
-    // Derivar clave dinámica y descifrar
-    uint8_t dynamic_key[16];
-    uint8_t seq_channel[8];
-    memcpy(seq_channel, &seq, 4);
-    memcpy(seq_channel + 4, &channel, 4);
-
-    if (aes_cmac(g_channel_key, 16, seq_channel, 8, dynamic_key) != 0) {
-        fprintf(stderr, "[decoder]  ERROR: No se pudo derivar dynamic_key\n");
-        return -1;
-    }
-    printf("[decoder]  Clave derivada correctamente\n");
-    fflush(stdout);
-
-    // Descifrar frame
-    size_t offset = HEADER_SIZE + SUBS_TOTAL_SIZE;
-    uint8_t* plaintext = (uint8_t*)malloc(CIPHER_SIZE);
-    if (!plaintext) return -1;
-    memcpy(plaintext, packet + offset, CIPHER_SIZE);
-
-    // Nonce para AES-CTR = 8 bytes en cero + 4 bytes con seq (big-endian) + ...
-    uint8_t nonce[16] = {0};
-    store64_be(seq, nonce + 8);
-
-    // Usamos la función con mbed TLS
-    aes_ctr_xcrypt(dynamic_key, 16, nonce, plaintext, CIPHER_SIZE);
-
-    *frame_out = (uint8_t*)malloc(FRAME_SIZE);
-    memcpy(*frame_out, plaintext, FRAME_SIZE);
-    free(plaintext);
-
-    printf("[decoder]  Descifrado exitoso\n");
-    fflush(stdout);
-
-    *frame_len_out = FRAME_SIZE;
-    return 0;
+if (packet_len < PACKET_MIN_SIZE) {
+    fprintf(stderr, "[decoder]  ERROR: Paquete demasiado corto\n");
+    return -1;
 }
+
+uint32_t seq, channel, encoder_id;
+uint64_t ts_ext;
+memcpy(&seq, packet, 4);
+memcpy(&channel, packet + 4, 4);
+memcpy(&encoder_id, packet + 8, 4);
+memcpy(&ts_ext, packet + 12, 8);
+
+printf("[decoder]  Header => seq=%u, channel=%u, enc_id=%u, ts_ext=%llu\n",
+        seq, channel, encoder_id, (unsigned long long)ts_ext);
+fflush(stdout);
+
+// Extraer suscripciÃ³n y validar CMAC
+const uint8_t* subs_data = packet + HEADER_SIZE;  
+const uint8_t* subs_mac  = subs_data + SUBS_DATA_SIZE; 
+
+uint8_t calc_mac[16];
+if (aes_cmac(g_channel_key, 16, subs_data, SUBS_DATA_SIZE, calc_mac) != 0) {
+    fprintf(stderr, "[decoder]  ERROR: CMAC de suscripciÃ³n fallÃ³\n");
+    return -1;
+}
+if (memcmp(calc_mac, subs_mac, 16) != 0) {
+    fprintf(stderr, "[decoder] ERROR: CMAC invÃ¡lido, posible manipulaciÃ³n\n");
+    return -1;
+}
+printf("[decoder]  CMAC de suscripciÃ³n vÃ¡lido\n");
+fflush(stdout);
+
+// Derivar clave dinÃ¡mica y descifrar
+uint8_t dynamic_key[16];
+uint8_t seq_channel[8];
+memcpy(seq_channel, &seq, 4);
+memcpy(seq_channel+4, &channel, 4);
+
+if (aes_cmac(g_channel_key, 16, seq_channel, 8, dynamic_key) != 0) {
+    fprintf(stderr, "[decoder]  ERROR: No se pudo derivar dynamic_key\n");
+    return -1;
+}
+printf("[decoder]  Clave derivada correctamente\n");
+fflush(stdout);
+
+// Descifrar frame
+size_t offset = HEADER_SIZE + SUBS_TOTAL_SIZE;
+uint8_t* plaintext = (uint8_t*)malloc(CIPHER_SIZE);
+if (!plaintext) return -1;
+memcpy(plaintext, packet+offset, CIPHER_SIZE);
+
+uint8_t nonce[16] = {0};
+store64_be(seq, nonce+8);
+aes_ctr_xcrypt(dynamic_key, 16, nonce, plaintext, CIPHER_SIZE);
+
+*frame_out = (uint8_t*)malloc(FRAME_SIZE);
+memcpy(*frame_out, plaintext, FRAME_SIZE);
+free(plaintext);
+
+printf("[decoder]  Descifrado exitoso\n");
+fflush(stdout);
+
+*frame_len_out = FRAME_SIZE;
+return 0;
+}
+
 
 /* -------------- decode() -> se usa al recibir DECODE_MSG -------------- */
 int decode(uint16_t pkt_len, uint8_t *encrypted_buf)
@@ -368,15 +362,20 @@ int decode(uint16_t pkt_len, uint8_t *encrypted_buf)
     uint8_t *frame_plain = NULL;
     size_t frame_len = 0;
 
-    int ret = secure_process_packet(encrypted_buf, pkt_len, &frame_plain, &frame_len);
+    int ret = secure_process_packet(encrypted_buf, pkt_len,
+                                    &frame_plain, &frame_len);
     if (ret < 0) {
         STATUS_LED_RED();
-        print_error("Decodificación falló\n");
+        print_error("DecodificaciÃ³n fallÃ³\n");
         return -1;
     }
 
-    // Aquí podrías chequear si estás suscrito al canal, etc.
+    // e.g. parseamos el channel del header (o lo devuelves en secure_process_packet)
+    // supongamos no lo devolvimos => si quisiÃ©ramos, guardarlo en una var global
     // ...
+    // Chequear si subscribed
+    // if(!is_subscribed(channel_decoded)) ...
+    // Por simplicidad, omitimos => o supÃ³n channel_decoded se extrajo
 
     // Retornamos el frame en claro al host
     write_packet(DECODE_MSG, frame_plain, (uint16_t)frame_len);
@@ -386,6 +385,7 @@ int decode(uint16_t pkt_len, uint8_t *encrypted_buf)
 
 /* -------------- is_subscribed() etc. -------------- */
 int is_subscribed(uint32_t channel) {
+    // Ejemplo de eCTF: emergency channel
     if (channel == EMERGENCY_CHANNEL) {
         return 1;
     }
@@ -458,8 +458,7 @@ int update_subscription(uint16_t pkt_len, subscription_update_packet_t *update) 
 
 /* -------------- init() -------------- */
 void init(void) {
-    // Ya no llamamos a wolfSSL_Init()
-    // wolfSSL_Init();
+    wolfSSL_Init();
 
     flash_simple_init();
     flash_simple_read(FLASH_STATUS_ADDR, &decoder_status, sizeof(decoder_status));
@@ -532,4 +531,4 @@ int main(void) {
         }
     }
     return 0;
-}
+} 
