@@ -458,7 +458,7 @@ int update_subscription(uint16_t pkt_len, subscription_update_packet_t *update) 
 
 /* -------------- init() -------------- */
 void init(void) {
-    wolfSSL_Init();
+    //wolfSSL_Init();
 
     flash_simple_init();
     flash_simple_read(FLASH_STATUS_ADDR, &decoder_status, sizeof(decoder_status));
