@@ -172,8 +172,7 @@ VPATH += src
 
 # eCTF Crypto Example
 ifeq ($(CRYPTO_EXAMPLE), 1)
-#VPATH += wolfssl/wolfcrypt/src
-LDLIBS += -lmbedcrypto -lmbedtls -lmbedx509
+VPATH += wolfssl/wolfcrypt/src
 endif
 
 VPATH := $(VPATH)
@@ -183,7 +182,7 @@ IPATH += .
 IPATH += include
 # eCTF Crypto Example
 ifeq ($(CRYPTO_EXAMPLE), 1)
-#IPATH += $(PROJECT_ROOT)/wolfssl
+IPATH += wolfssl
 endif
 IPATH := $(IPATH)
 
@@ -256,12 +255,12 @@ ifeq ($(CRYPTO_EXAMPLE), 1)
 PROJ_CFLAGS += -DMXC_ASSERT_ENABLE
 # eCTF Crypto Example - WolfSSL Flags
 PROJ_CFLAGS += -DCRYPTO_EXAMPLE=1
-#PROJ_CFLAGS += -DNO_WOLFSSL_DIR
-#PROJ_CFLAGS += -DWOLFSSL_AES_DIRECT
+PROJ_CFLAGS += -DNO_WOLFSSL_DIR
+PROJ_CFLAGS += -DWOLFSSL_AES_DIRECT
 PROJ_CFLAGS += -DSINGLE_THREADED
 # From https://www.wolfssl.com/documentation/manuals/wolfssl/chapter02.html#building-with-gcc-arm
 PROJ_CFLAGS += -DHAVE_PK_CALLBACKS                                                               
-#PROJ_CFLAGS += -DWOLFSSL_USER_IO                                                                 
+PROJ_CFLAGS += -DWOLFSSL_USER_IO                                                                 
 PROJ_CFLAGS += -DNO_WRITEV -DTIME_T_NOT_64BIT                                                    
 endif
 

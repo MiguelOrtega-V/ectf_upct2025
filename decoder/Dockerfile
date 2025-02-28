@@ -24,7 +24,7 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y \
     libtool \
     texinfo \
     unzip \
-    libmbedtls-dev   
+    libwolfssl-dev   
 
 # Install MSDK
 RUN apt-get install -y unzip && \
