@@ -8,9 +8,9 @@
 *          - integra UART y flash subs, etc.
 */
 
-#define WOLFSSL_AES_DIRECT
+//#define WOLFSSL_AES_DIRECT
 #include <wolfssl/options.h>
-#include <wolfssl/ssl.h>
+//#include <wolfssl/ssl.h>
 #include <wolfssl/wolfcrypt/aes.h>
 
 #include <stdio.h>

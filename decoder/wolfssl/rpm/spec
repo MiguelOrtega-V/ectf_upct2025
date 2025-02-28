@@ -37,7 +37,7 @@ you will need to install %{name}-devel.
 %setup -q
 
 %build
-%configure  '--enable-aes' '--enable-tls' '--enable-opensslall'
+%configure 
 %{__make} %{?_smp_mflags}
 if [ "no" = "yes" ]
 then

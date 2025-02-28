@@ -40,13 +40,6 @@ tests/api/unit_test-test_poly1305.o: tests/api/test_poly1305.c \
  /usr/include/x86_64-linux-gnu/bits/types/struct___jmp_buf_tag.h \
  /usr/include/x86_64-linux-gnu/bits/pthread_stack_min-dynamic.h \
  /usr/include/x86_64-linux-gnu/bits/pthread_stack_min.h \
- /usr/include/unistd.h /usr/include/x86_64-linux-gnu/bits/posix_opt.h \
- /usr/include/x86_64-linux-gnu/bits/environments.h \
- /usr/include/x86_64-linux-gnu/bits/confname.h \
- /usr/include/x86_64-linux-gnu/bits/getopt_posix.h \
- /usr/include/x86_64-linux-gnu/bits/getopt_core.h \
- /usr/include/x86_64-linux-gnu/bits/unistd.h \
- /usr/include/x86_64-linux-gnu/bits/unistd_ext.h \
  /usr/lib/gcc/x86_64-linux-gnu/11/include/stdatomic.h \
  /usr/include/stdio.h \
  /usr/include/x86_64-linux-gnu/bits/libc-header-start.h \
@@ -66,7 +59,14 @@ tests/api/unit_test-test_poly1305.o: tests/api/test_poly1305.c \
  /usr/include/x86_64-linux-gnu/bits/posix1_lim.h \
  /usr/include/x86_64-linux-gnu/bits/local_lim.h \
  /usr/include/linux/limits.h \
- /usr/include/x86_64-linux-gnu/bits/dirent_ext.h \
+ /usr/include/x86_64-linux-gnu/bits/dirent_ext.h /usr/include/unistd.h \
+ /usr/include/x86_64-linux-gnu/bits/posix_opt.h \
+ /usr/include/x86_64-linux-gnu/bits/environments.h \
+ /usr/include/x86_64-linux-gnu/bits/confname.h \
+ /usr/include/x86_64-linux-gnu/bits/getopt_posix.h \
+ /usr/include/x86_64-linux-gnu/bits/getopt_core.h \
+ /usr/include/x86_64-linux-gnu/bits/unistd.h \
+ /usr/include/x86_64-linux-gnu/bits/unistd_ext.h \
  /usr/include/x86_64-linux-gnu/sys/stat.h \
  /usr/include/x86_64-linux-gnu/bits/stat.h \
  /usr/include/x86_64-linux-gnu/bits/struct_stat.h \
@@ -103,12 +103,7 @@ tests/api/unit_test-test_poly1305.o: tests/api/test_poly1305.c \
  wolfssl/version.h wolfssl/error-ssl.h wolfssl/wolfcrypt/error-crypt.h \
  wolfssl/wolfcrypt/asn_public.h wolfssl/wolfcrypt/dsa.h \
  wolfssl/wolfcrypt/random.h wolfssl/wolfcrypt/logging.h \
- wolfssl/wolfcrypt/pkcs12.h wolfssl/wolfcrypt/asn.h \
- wolfssl/wolfcrypt/wolfmath.h wolfssl/wolfcrypt/sp_int.h \
- wolfssl/wolfcrypt/dh.h wolfssl/openssl/compat_types.h \
- wolfssl/wolfcrypt/hmac.h wolfssl/callbacks.h wolfssl/openssl/bn.h \
- wolfssl/openssl/hmac.h wolfssl/openssl/opensslv.h wolfssl/openssl/rsa.h \
- wolfssl/openssl/err.h wolfssl/wolfcrypt/rsa.h wolfssl/wolfio.h \
+ wolfssl/wolfcrypt/pkcs12.h wolfssl/callbacks.h wolfssl/wolfio.h \
  /usr/include/errno.h /usr/include/x86_64-linux-gnu/bits/errno.h \
  /usr/include/linux/errno.h /usr/include/x86_64-linux-gnu/asm/errno.h \
  /usr/include/asm-generic/errno.h /usr/include/asm-generic/errno-base.h \
@@ -135,22 +130,12 @@ tests/api/unit_test-test_poly1305.o: tests/api/test_poly1305.c \
  /usr/include/netinet/in.h /usr/include/x86_64-linux-gnu/bits/in.h \
  /usr/include/x86_64-linux-gnu/sys/un.h \
  /usr/include/x86_64-linux-gnu/sys/uio.h \
- /usr/include/x86_64-linux-gnu/bits/uio_lim.h wolfssl/openssl/asn1.h \
- wolfssl/openssl/ssl.h wolfssl/openssl/tls1.h wolfssl/openssl/evp.h \
- wolfssl/openssl/md5.h wolfssl/openssl/sha.h wolfssl/openssl/sha3.h \
- wolfssl/openssl/ripemd.h wolfssl/openssl/dsa.h wolfssl/openssl/ec.h \
- wolfssl/wolfcrypt/ecc.h wolfssl/openssl/dh.h wolfssl/wolfcrypt/aes.h \
- wolfssl/wolfcrypt/des3.h wolfssl/wolfcrypt/arc4.h \
- wolfssl/wolfcrypt/chacha20_poly1305.h wolfssl/wolfcrypt/chacha.h \
- wolfssl/wolfcrypt/pwdbased.h wolfssl/wolfcrypt/coding.h \
- wolfssl/openssl/objects.h wolfssl/openssl/obj_mac.h \
- wolfssl/openssl/bio.h wolfssl/openssl/crypto.h wolfssl/openssl/conf.h \
- wolfssl/openssl/x509.h wolfssl/openssl/ecdsa.h wolfssl/openssl/pkcs7.h \
- wolfssl/wolfcrypt/pkcs7.h wolfssl/openssl/pem.h wolfssl/openssl/stack.h \
- wolfssl/test.h /usr/include/assert.h wolfssl/wolfcrypt/mem_track.h \
- /usr/include/netdb.h /usr/include/rpc/netdb.h \
- /usr/include/x86_64-linux-gnu/bits/netdb.h /usr/include/netinet/tcp.h \
- /usr/include/x86_64-linux-gnu/sys/ioctl.h \
+ /usr/include/x86_64-linux-gnu/bits/uio_lim.h wolfssl/test.h \
+ /usr/include/assert.h wolfssl/wolfcrypt/mem_track.h \
+ wolfssl/wolfcrypt/asn.h wolfssl/wolfcrypt/wolfmath.h \
+ wolfssl/wolfcrypt/sp_int.h wolfssl/wolfcrypt/dh.h /usr/include/netdb.h \
+ /usr/include/rpc/netdb.h /usr/include/x86_64-linux-gnu/bits/netdb.h \
+ /usr/include/netinet/tcp.h /usr/include/x86_64-linux-gnu/sys/ioctl.h \
  /usr/include/x86_64-linux-gnu/bits/ioctls.h \
  /usr/include/x86_64-linux-gnu/asm/ioctls.h \
  /usr/include/asm-generic/ioctls.h /usr/include/linux/ioctl.h \
@@ -230,14 +215,6 @@ wolfssl/wolfcrypt/wc_port.h:
 /usr/include/x86_64-linux-gnu/bits/types/struct___jmp_buf_tag.h:
 /usr/include/x86_64-linux-gnu/bits/pthread_stack_min-dynamic.h:
 /usr/include/x86_64-linux-gnu/bits/pthread_stack_min.h:
-/usr/include/unistd.h:
-/usr/include/x86_64-linux-gnu/bits/posix_opt.h:
-/usr/include/x86_64-linux-gnu/bits/environments.h:
-/usr/include/x86_64-linux-gnu/bits/confname.h:
-/usr/include/x86_64-linux-gnu/bits/getopt_posix.h:
-/usr/include/x86_64-linux-gnu/bits/getopt_core.h:
-/usr/include/x86_64-linux-gnu/bits/unistd.h:
-/usr/include/x86_64-linux-gnu/bits/unistd_ext.h:
 /usr/lib/gcc/x86_64-linux-gnu/11/include/stdatomic.h:
 /usr/include/stdio.h:
 /usr/include/x86_64-linux-gnu/bits/libc-header-start.h:
@@ -259,6 +236,14 @@ wolfssl/wolfcrypt/wc_port.h:
 /usr/include/x86_64-linux-gnu/bits/local_lim.h:
 /usr/include/linux/limits.h:
 /usr/include/x86_64-linux-gnu/bits/dirent_ext.h:
+/usr/include/unistd.h:
+/usr/include/x86_64-linux-gnu/bits/posix_opt.h:
+/usr/include/x86_64-linux-gnu/bits/environments.h:
+/usr/include/x86_64-linux-gnu/bits/confname.h:
+/usr/include/x86_64-linux-gnu/bits/getopt_posix.h:
+/usr/include/x86_64-linux-gnu/bits/getopt_core.h:
+/usr/include/x86_64-linux-gnu/bits/unistd.h:
+/usr/include/x86_64-linux-gnu/bits/unistd_ext.h:
 /usr/include/x86_64-linux-gnu/sys/stat.h:
 /usr/include/x86_64-linux-gnu/bits/stat.h:
 /usr/include/x86_64-linux-gnu/bits/struct_stat.h:
@@ -311,19 +296,7 @@ wolfssl/wolfcrypt/dsa.h:
 wolfssl/wolfcrypt/random.h:
 wolfssl/wolfcrypt/logging.h:
 wolfssl/wolfcrypt/pkcs12.h:
-wolfssl/wolfcrypt/asn.h:
-wolfssl/wolfcrypt/wolfmath.h:
-wolfssl/wolfcrypt/sp_int.h:
-wolfssl/wolfcrypt/dh.h:
-wolfssl/openssl/compat_types.h:
-wolfssl/wolfcrypt/hmac.h:
 wolfssl/callbacks.h:
-wolfssl/openssl/bn.h:
-wolfssl/openssl/hmac.h:
-wolfssl/openssl/opensslv.h:
-wolfssl/openssl/rsa.h:
-wolfssl/openssl/err.h:
-wolfssl/wolfcrypt/rsa.h:
 wolfssl/wolfio.h:
 /usr/include/errno.h:
 /usr/include/x86_64-linux-gnu/bits/errno.h:
@@ -359,39 +332,13 @@ wolfssl/wolfio.h:
 /usr/include/x86_64-linux-gnu/sys/un.h:
 /usr/include/x86_64-linux-gnu/sys/uio.h:
 /usr/include/x86_64-linux-gnu/bits/uio_lim.h:
-wolfssl/openssl/asn1.h:
-wolfssl/openssl/ssl.h:
-wolfssl/openssl/tls1.h:
-wolfssl/openssl/evp.h:
-wolfssl/openssl/md5.h:
-wolfssl/openssl/sha.h:
-wolfssl/openssl/sha3.h:
-wolfssl/openssl/ripemd.h:
-wolfssl/openssl/dsa.h:
-wolfssl/openssl/ec.h:
-wolfssl/wolfcrypt/ecc.h:
-wolfssl/openssl/dh.h:
-wolfssl/wolfcrypt/aes.h:
-wolfssl/wolfcrypt/des3.h:
-wolfssl/wolfcrypt/arc4.h:
-wolfssl/wolfcrypt/chacha20_poly1305.h:
-wolfssl/wolfcrypt/chacha.h:
-wolfssl/wolfcrypt/pwdbased.h:
-wolfssl/wolfcrypt/coding.h:
-wolfssl/openssl/objects.h:
-wolfssl/openssl/obj_mac.h:
-wolfssl/openssl/bio.h:
-wolfssl/openssl/crypto.h:
-wolfssl/openssl/conf.h:
-wolfssl/openssl/x509.h:
-wolfssl/openssl/ecdsa.h:
-wolfssl/openssl/pkcs7.h:
-wolfssl/wolfcrypt/pkcs7.h:
-wolfssl/openssl/pem.h:
-wolfssl/openssl/stack.h:
 wolfssl/test.h:
 /usr/include/assert.h:
 wolfssl/wolfcrypt/mem_track.h:
+wolfssl/wolfcrypt/asn.h:
+wolfssl/wolfcrypt/wolfmath.h:
+wolfssl/wolfcrypt/sp_int.h:
+wolfssl/wolfcrypt/dh.h:
 /usr/include/netdb.h:
 /usr/include/rpc/netdb.h:
 /usr/include/x86_64-linux-gnu/bits/netdb.h:
