@@ -167,7 +167,8 @@ class Encoder:
         cipher = AES.new(dynamic_key, AES.MODE_CTR, initial_value=nonce, nonce=b"")
         return cipher.encrypt(plaintext_24)
 
-    def encode(self, channel: int, input_msg: bytes, timestamp: int) -> bytes:
+    def encode(self, channel: int, input_msg: bytes, timestamp: int,
+           device_id: int = None, start: int = None, end: int = None) -> bytes:
         self.seq += 1
         seq = self.seq
 
@@ -188,23 +189,35 @@ class Encoder:
         # 5) Header(20) => <I I I Q> (seq, channel, encoder_id, timestamp) en LE
         header = struct.pack("<I I I Q", seq, channel, self.encoder_id, timestamp)
 
-        # 6) Suscripción(52). Ejemplo => 36 +16 CMAC
-        #   36 => 5 enteros <I I I I I> + partial_key(16)
-        subscription_fields = struct.pack("<IIIII", 1, 1000, 2000, channel, self.encoder_id)
-        partial_key = b"1234567890abcdef"  # 16
-        subs_36 = subscription_fields + partial_key
-        #   CMAC con K_channel (o KMAC, depende tu diseño)
-        mac_16 = aes_cmac(K_channel, subs_36)
-        subscription52 = subs_36 + mac_16
+        # 6) Suscripción:
+        # Si se proporcionan device_id, start y end, se genera el bloque de suscripción de 32 bytes:
+        #    {CH_ID (4) || DECODER_ID (4) || TS_START (4) || TS_END (4) || HMAC (16)}
+        # En caso contrario, se usa el bloque "por defecto" de 52 bytes.
+        if device_id is not None and start is not None and end is not None:
+            subscription_data = struct.pack("<IIII",
+                channel   & 0xffffffff,
+                device_id & 0xffffffff,
+                start     & 0xffffffff,
+                end       & 0xffffffff)
+            mac_16 = aes_cmac(K_channel, subscription_data)
+            subscription_block = subscription_data + mac_16  # Total 32 bytes
+        else:
+            # Bloque por defecto (52 bytes)
+            subscription_fields = struct.pack("<IIIII", 1, 1000, 2000, channel, self.encoder_id)
+            partial_key = b"1234567890abcdef"  # 16 bytes fijos
+            subs_36 = subscription_fields + partial_key
+            mac_16 = aes_cmac(K_channel, subs_36)
+            subscription_block = subs_36 + mac_16
 
-        # 7) Paquete => 20 + 52 + 24 = 96
-        packet = header + subscription52 + ciph_24
+        # 7) Paquete final: header + bloque de suscripción + ciphertext (24 bytes)
+        packet = header + subscription_block + ciph_24
 
         print("Sent pkt....:")
         print(packet.hex())
         print("----------------------------------------------------------")
         
         return packet
+
 
 def main():
     parser = argparse.ArgumentParser()

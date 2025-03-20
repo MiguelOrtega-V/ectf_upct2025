@@ -83,7 +83,11 @@ def gen_subscription(secrets: bytes, device_id: int, start: int, end: int, chann
     
     # Empaquetar los 4 enteros (16 bytes) en el orden: CH_ID, DECODER_ID, TS_START, TS_END.
     # Se utiliza el formato '<IIII' (little-endian, 4 enteros de 4 bytes cada uno).
-    subscription_data = struct.pack("<IIII", channel, device_id, start, end)
+    subscription_data = struct.pack("<IIII",
+        channel   & 0xffffffff,
+        device_id & 0xffffffff,
+        start     & 0xffffffff,
+        end       & 0xffffffff)
     
     # Calcular HMAC_CODE (16 bytes) usando la clave específica del canal (K_CHANNEL_ID).
     hmac_code = derive_cmac(channel_key, subscription_data)
