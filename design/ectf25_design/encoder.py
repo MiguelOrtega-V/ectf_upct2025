@@ -192,7 +192,7 @@ class Encoder:
         start_time = 123456789  # Debería venir de algún parámetro
         end_time = 387654321    # Debería venir de algún parámetro
 
-        subscription_fields = struct.pack("<IQI", channel, start_time, end_time)
+        subscription_fields = struct.pack("<IQQ", channel, start_time, end_time)
         mac_16 = aes_cmac(K_channel, subscription_fields)
         subscription32 = subscription_fields + mac_16  # Total: 32 bytes
 
