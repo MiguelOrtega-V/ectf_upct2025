@@ -344,7 +344,7 @@ uint8_t nonce[16] = {0};
 store64_be(seq, nonce+8);
 aes_ctr_xcrypt(dynamic_key, 16, nonce, plaintext, CIPHER_SIZE);
 
-*frame_out = (uint8_t*)malloc(FRAME_SIZE);
+frame_out = (uint8_t)malloc(FRAME_SIZE);
 memcpy(*frame_out, plaintext, FRAME_SIZE);
 free(plaintext);
 
@@ -387,14 +387,20 @@ int decode(uint16_t pkt_len, uint8_t *encrypted_buf)
 int is_subscribed(uint32_t channel) {
     // Ejemplo de eCTF: emergency channel
     if (channel == EMERGENCY_CHANNEL) {
+        printf("[decoder] Verificando suscripción para canal %u (EMERGENCY_CHANNEL)\n", channel);
         return 1;
     }
+    
+    printf("[decoder] Verificando suscripción para canal %u\n", channel);
     for (int i = 0; i < MAX_CHANNEL_COUNT; i++) {
         if (decoder_status.subscribed_channels[i].id == channel &&
             decoder_status.subscribed_channels[i].active) {
+            printf("[decoder] Canal %u está suscrito (posición %d)\n", channel, i);
             return 1;
         }
     }
+    
+    printf("[decoder] Canal %u NO está suscrito\n", channel);
     return 0;
 }
 
@@ -407,8 +413,21 @@ int list_channels() {
     uint16_t len;
 
     resp.n_channels = 0;
+    
+    // Depurar el estado actual
+    printf("[decoder] Listando canales suscritos:\n");
+    for (uint32_t i = 0; i < MAX_CHANNEL_COUNT; i++) {
+        printf("[decoder] Canal[%d]: active=%d, id=%u\n", 
+               i, 
+               decoder_status.subscribed_channels[i].active ? 1 : 0,
+               decoder_status.subscribed_channels[i].id);
+    }
+    
     for (uint32_t i = 0; i < MAX_CHANNEL_COUNT; i++) {
         if (decoder_status.subscribed_channels[i].active) {
+            printf("[decoder] Agregando canal %u a la respuesta\n", 
+                  decoder_status.subscribed_channels[i].id);
+                  
             resp.channel_info[resp.n_channels].channel =
                 decoder_status.subscribed_channels[i].id;
             resp.channel_info[resp.n_channels].start =
@@ -418,6 +437,8 @@ int list_channels() {
             resp.n_channels++;
         }
     }
+    
+    printf("[decoder] Enviando respuesta con %u canales\n", resp.n_channels);
     len = sizeof(resp.n_channels) + (sizeof(channel_info_t) * resp.n_channels);
     write_packet(LIST_MSG, &resp, len);
     return 0;
@@ -429,12 +450,17 @@ int update_subscription(uint16_t pkt_len, subscription_update_packet_t *update) 
         print_error("Cannot subscribe to emergency channel\n");
         return -1;
     }
+    
+    // Verificar explícitamente el canal 1
+    printf("[decoder] Recibida solicitud para suscribir al canal %u\n", update->channel);
+    
     // find place in array
     int i;
     for (i = 0; i < MAX_CHANNEL_COUNT; i++) {
         if (!decoder_status.subscribed_channels[i].active ||
             decoder_status.subscribed_channels[i].id == update->channel)
         {
+            printf("[decoder] Actualizando suscripción en posición %d para canal %u\n", i, update->channel);
             decoder_status.subscribed_channels[i].active = true;
             decoder_status.subscribed_channels[i].id = update->channel;
             decoder_status.subscribed_channels[i].start_timestamp =
@@ -444,14 +470,40 @@ int update_subscription(uint16_t pkt_len, subscription_update_packet_t *update) 
             break;
         }
     }
+    
     if (i == MAX_CHANNEL_COUNT) {
         STATUS_LED_RED();
         print_error("Max subscriptions reached\n");
         return -1;
     }
+    
     // persist
     flash_simple_erase_page(FLASH_STATUS_ADDR);
-    flash_simple_write(FLASH_STATUS_ADDR, &decoder_status, sizeof(flash_entry_t));
+    int write_result = flash_simple_write(FLASH_STATUS_ADDR, &decoder_status, sizeof(flash_entry_t));
+    if (write_result != 0) {
+        printf("[decoder] Error al escribir en flash: %d\n", write_result);
+        return -1;
+    }
+    
+    // Verificar que se guardó correctamente
+    flash_entry_t verify_status;
+    flash_simple_read(FLASH_STATUS_ADDR, &verify_status, sizeof(flash_entry_t));
+    
+    // Verificar que la suscripción está activa para el canal solicitado
+    bool found = false;
+    for (i = 0; i < MAX_CHANNEL_COUNT; i++) {
+        if (verify_status.subscribed_channels[i].active && 
+            verify_status.subscribed_channels[i].id == update->channel) {
+            found = true;
+            printf("[decoder] Verificación: canal %u activado correctamente\n", update->channel);
+            break;
+        }
+    }
+    
+    if (!found) {
+        printf("[decoder] ADVERTENCIA: No se pudo verificar la suscripción al canal %u\n", update->channel);
+    }
+    
     write_packet(SUBSCRIBE_MSG, NULL, 0);
     return 0;
 }
@@ -531,4 +583,4 @@ int main(void) {
         }
     }
     return 0;
-} 
+}
