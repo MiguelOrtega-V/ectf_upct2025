@@ -429,27 +429,36 @@ int update_subscription(uint16_t pkt_len, subscription_update_packet_t *update) 
         print_error("Cannot subscribe to emergency channel\n");
         return -1;
     }
-    // find place in array
-    int i;
-    for (i = 0; i < MAX_CHANNEL_COUNT; i++) {
-        if (!decoder_status.subscribed_channels[i].active ||
-            decoder_status.subscribed_channels[i].id == update->channel)
-        {
+
+    // Primero: ¿ya está presente el canal? Actualizar si es así
+    for (int i = 0; i < MAX_CHANNEL_COUNT; i++) {
+        if (decoder_status.subscribed_channels[i].id == update->channel) {
             decoder_status.subscribed_channels[i].active = true;
-            decoder_status.subscribed_channels[i].id = update->channel;
-            decoder_status.subscribed_channels[i].start_timestamp =
-                update->start_timestamp;
-            decoder_status.subscribed_channels[i].end_timestamp =
-                update->end_timestamp;
-            break;
+            decoder_status.subscribed_channels[i].start_timestamp = update->start_timestamp;
+            decoder_status.subscribed_channels[i].end_timestamp = update->end_timestamp;
+
+            goto persist_and_respond;
         }
     }
-    if (i == MAX_CHANNEL_COUNT) {
-        STATUS_LED_RED();
-        print_error("Max subscriptions reached\n");
-        return -1;
+
+    // Segundo: buscar espacio libre
+    for (int i = 0; i < MAX_CHANNEL_COUNT; i++) {
+        if (!decoder_status.subscribed_channels[i].active) {
+            decoder_status.subscribed_channels[i].active = true;
+            decoder_status.subscribed_channels[i].id = update->channel;
+            decoder_status.subscribed_channels[i].start_timestamp = update->start_timestamp;
+            decoder_status.subscribed_channels[i].end_timestamp = update->end_timestamp;
+
+            goto persist_and_respond;
+        }
     }
-    // persist
+
+    // Si no hay hueco
+    STATUS_LED_RED();
+    print_error("Max subscriptions reached\n");
+    return -1;
+
+persist_and_respond:
     flash_simple_erase_page(FLASH_STATUS_ADDR);
     flash_simple_write(FLASH_STATUS_ADDR, &decoder_status, sizeof(flash_entry_t));
     write_packet(SUBSCRIBE_MSG, NULL, 0);
