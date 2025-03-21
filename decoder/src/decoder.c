@@ -385,56 +385,17 @@ int decode(uint16_t pkt_len, uint8_t *encrypted_buf)
 
 /* -------------- is_subscribed() etc. -------------- */
 int is_subscribed(uint32_t channel) {
-    // Canal de emergencia siempre está suscrito
+    // Ejemplo de eCTF: emergency channel
     if (channel == EMERGENCY_CHANNEL) {
-        printf("[decoder] Canal %u es EMERGENCY_CHANNEL, siempre suscrito\n", channel);
+        printf("[decoder] Verificando suscripción para canal %u (EMERGENCY_CHANNEL)\n", channel);
         return 1;
     }
     
-    // Verificar canal 1 explícitamente (solución al problema)
-    if (channel == 1) {
-        // Para el canal 1, hacemos una búsqueda más exhaustiva
-        printf("[decoder] Verificando suscripción para canal especial 1\n");
-        
-        // Primero verificamos en memoria
-        for (int i = 0; i < MAX_CHANNEL_COUNT; i++) {
-            if (decoder_status.subscribed_channels[i].active && 
-                decoder_status.subscribed_channels[i].id == 1) {
-                printf("[decoder] Canal 1 está activo en memoria (slot %d)\n", i);
-                return 1;
-            }
-        }
-        
-        // Si no está en memoria, verificamos en flash por si acaso
-        flash_entry_t temp_status;
-        flash_simple_read(FLASH_STATUS_ADDR, &temp_status, sizeof(flash_entry_t));
-        
-        for (int i = 0; i < MAX_CHANNEL_COUNT; i++) {
-            if (temp_status.subscribed_channels[i].active && 
-                temp_status.subscribed_channels[i].id == 1) {
-                printf("[decoder] Canal 1 encontrado en flash pero no en memoria (slot %d)\n", i);
-                
-                // Actualizar memoria desde flash para este canal
-                decoder_status.subscribed_channels[i].active = true;
-                decoder_status.subscribed_channels[i].id = 1;
-                decoder_status.subscribed_channels[i].start_timestamp = 
-                    temp_status.subscribed_channels[i].start_timestamp;
-                decoder_status.subscribed_channels[i].end_timestamp = 
-                    temp_status.subscribed_channels[i].end_timestamp;
-                
-                return 1;
-            }
-        }
-        
-        printf("[decoder] Canal 1 NO está suscrito ni en memoria ni en flash\n");
-        return 0;
-    }
-    
-    // Para otros canales, verificación normal
+    printf("[decoder] Verificando suscripción para canal %u\n", channel);
     for (int i = 0; i < MAX_CHANNEL_COUNT; i++) {
         if (decoder_status.subscribed_channels[i].id == channel &&
             decoder_status.subscribed_channels[i].active) {
-            printf("[decoder] Canal %u está suscrito (slot %d)\n", channel, i);
+            printf("[decoder] Canal %u está suscrito (posición %d)\n", channel, i);
             return 1;
         }
     }
@@ -451,64 +412,21 @@ int list_channels() {
     list_response_t resp;
     uint16_t len;
 
-    printf("[decoder] Inicio de list_channels()\n");
-    
-    // Forzar una recarga desde flash para asegurar datos actualizados
-    flash_simple_read(FLASH_STATUS_ADDR, &decoder_status, sizeof(decoder_status));
-    
     resp.n_channels = 0;
     
-    // Verificar canal 1 - búsqueda especial
-    bool found_channel_one = false;
-    int channel_one_slot = -1;
-    
-    printf("[decoder] Estado actual de canales en memoria:\n");
+    // Depurar el estado actual
+    printf("[decoder] Listando canales suscritos:\n");
     for (uint32_t i = 0; i < MAX_CHANNEL_COUNT; i++) {
-        printf("[decoder] Slot[%d]: active=%d, id=%u, start=%llu, end=%llu\n", 
+        printf("[decoder] Canal[%d]: active=%d, id=%u\n", 
                i, 
                decoder_status.subscribed_channels[i].active ? 1 : 0,
-               decoder_status.subscribed_channels[i].id,
-               (unsigned long long)decoder_status.subscribed_channels[i].start_timestamp,
-               (unsigned long long)decoder_status.subscribed_channels[i].end_timestamp);
-        
-        // Buscar canal 1
-        if (decoder_status.subscribed_channels[i].active && 
-            decoder_status.subscribed_channels[i].id == 1) {
-            found_channel_one = true;
-            channel_one_slot = i;
-            printf("[decoder] ATENCIÓN: Canal 1 encontrado en slot %d\n", i);
-        }
+               decoder_status.subscribed_channels[i].id);
     }
     
-    // Si no encontramos canal 1 en memoria, buscarlo en flash
-    if (!found_channel_one) {
-        flash_entry_t temp_status;
-        flash_simple_read(FLASH_STATUS_ADDR, &temp_status, sizeof(flash_entry_t));
-        
-        for (int i = 0; i < MAX_CHANNEL_COUNT; i++) {
-            if (temp_status.subscribed_channels[i].active && 
-                temp_status.subscribed_channels[i].id == 1) {
-                found_channel_one = true;
-                channel_one_slot = i;
-                
-                // Actualizar en memoria
-                printf("[decoder] Canal 1 encontrado en flash pero no en memoria (slot %d)\n", i);
-                decoder_status.subscribed_channels[i].active = true;
-                decoder_status.subscribed_channels[i].id = 1;
-                decoder_status.subscribed_channels[i].start_timestamp = 
-                    temp_status.subscribed_channels[i].start_timestamp;
-                decoder_status.subscribed_channels[i].end_timestamp = 
-                    temp_status.subscribed_channels[i].end_timestamp;
-                break;
-            }
-        }
-    }
-    
-    // Construir la respuesta con todos los canales
     for (uint32_t i = 0; i < MAX_CHANNEL_COUNT; i++) {
         if (decoder_status.subscribed_channels[i].active) {
-            printf("[decoder] Agregando canal %u (slot %d) a la respuesta\n", 
-                  decoder_status.subscribed_channels[i].id, i);
+            printf("[decoder] Agregando canal %u a la respuesta\n", 
+                  decoder_status.subscribed_channels[i].id);
                   
             resp.channel_info[resp.n_channels].channel =
                 decoder_status.subscribed_channels[i].id;
@@ -520,228 +438,72 @@ int list_channels() {
         }
     }
     
-    // Asegurar que canal 1 está en la respuesta si debería estarlo
-    if (found_channel_one) {
-        bool channel_one_in_response = false;
-        for (uint32_t i = 0; i < resp.n_channels; i++) {
-            if (resp.channel_info[i].channel == 1) {
-                channel_one_in_response = true;
-                printf("[decoder] Confirmado: Canal 1 está en la respuesta en posición %d\n", i);
-                break;
-            }
-        }
-        
-        if (!channel_one_in_response && channel_one_slot >= 0) {
-            printf("[decoder] CORRECCIÓN: Forzando canal 1 en la respuesta\n");
-            resp.channel_info[resp.n_channels].channel = 1;
-            resp.channel_info[resp.n_channels].start =
-                decoder_status.subscribed_channels[channel_one_slot].start_timestamp;
-            resp.channel_info[resp.n_channels].end =
-                decoder_status.subscribed_channels[channel_one_slot].end_timestamp;
-            resp.n_channels++;
-        }
-    }
-    
     printf("[decoder] Enviando respuesta con %u canales\n", resp.n_channels);
-    for (uint32_t i = 0; i < resp.n_channels; i++) {
-        printf("[decoder] Respuesta[%d]: canal=%u, start=%llu, end=%llu\n",
-               i,
-               resp.channel_info[i].channel,
-               (unsigned long long)resp.channel_info[i].start,
-               (unsigned long long)resp.channel_info[i].end);
-    }
-    
     len = sizeof(resp.n_channels) + (sizeof(channel_info_t) * resp.n_channels);
     write_packet(LIST_MSG, &resp, len);
     return 0;
 }
 
 int update_subscription(uint16_t pkt_len, subscription_update_packet_t *update) {
-    // Imprimir información detallada del paquete recibido
-    printf("[decoder] Recibida solicitud de suscripción: canal=%u, start=%llu, end=%llu, decoder_id=%u\n",
-           update->channel, 
-           (unsigned long long)update->start_timestamp,
-           (unsigned long long)update->end_timestamp,
-           update->decoder_id);
-    
     if (update->channel == EMERGENCY_CHANNEL) {
         STATUS_LED_RED();
         print_error("Cannot subscribe to emergency channel\n");
         return -1;
     }
     
-    // Tratar canal 1 como caso especial
-    bool is_channel_one = (update->channel == 1);
-    if (is_channel_one) {
-        printf("[decoder] ATENCIÓN: Tratando canal especial 1\n");
-    }
+    // Verificar explícitamente el canal 1
+    printf("[decoder] Recibida solicitud para suscribir al canal %u\n", update->channel);
     
-    // Hacer una copia de seguridad de la estructura antes de modificarla
-    flash_entry_t backup_status;
-    memcpy(&backup_status, &decoder_status, sizeof(flash_entry_t));
-    
-    // Buscar un slot para el canal
-    int slot_index = -1;
-    int empty_slot = -1;
-    
-    // Primero, verificar si ya existe o encontrar un slot vacío
-    for (int i = 0; i < MAX_CHANNEL_COUNT; i++) {
-        printf("[decoder] Slot[%d]: active=%d, id=%u\n", 
-               i, decoder_status.subscribed_channels[i].active ? 1 : 0,
-               decoder_status.subscribed_channels[i].id);
-               
-        // Si encontramos el mismo canal, usar ese slot
-        if (decoder_status.subscribed_channels[i].active && 
-            decoder_status.subscribed_channels[i].id == update->channel) {
-            slot_index = i;
-            printf("[decoder] Canal %u encontrado en slot %d\n", update->channel, i);
+    // find place in array
+    int i;
+    for (i = 0; i < MAX_CHANNEL_COUNT; i++) {
+        if (!decoder_status.subscribed_channels[i].active ||
+            decoder_status.subscribed_channels[i].id == update->channel)
+        {
+            printf("[decoder] Actualizando suscripción en posición %d para canal %u\n", i, update->channel);
+            decoder_status.subscribed_channels[i].active = true;
+            decoder_status.subscribed_channels[i].id = update->channel;
+            decoder_status.subscribed_channels[i].start_timestamp =
+                update->start_timestamp;
+            decoder_status.subscribed_channels[i].end_timestamp =
+                update->end_timestamp;
             break;
         }
-        
-        // Si encontramos un slot vacío, anotarlo
-        if (!decoder_status.subscribed_channels[i].active && empty_slot == -1) {
-            empty_slot = i;
-            printf("[decoder] Slot vacío encontrado en posición %d\n", i);
-        }
     }
     
-    // Si no encontramos el canal pero hay un slot vacío, usar ese
-    if (slot_index == -1 && empty_slot != -1) {
-        slot_index = empty_slot;
-        printf("[decoder] Usando slot vacío %d para canal %u\n", slot_index, update->channel);
-    }
-    
-    // Si no hay slot disponible, reportar error
-    if (slot_index == -1) {
+    if (i == MAX_CHANNEL_COUNT) {
         STATUS_LED_RED();
         print_error("Max subscriptions reached\n");
         return -1;
     }
     
-    // Actualizar la suscripción en el slot seleccionado
-    decoder_status.subscribed_channels[slot_index].active = true;
-    decoder_status.subscribed_channels[slot_index].id = update->channel;
-    decoder_status.subscribed_channels[slot_index].start_timestamp = update->start_timestamp;
-    decoder_status.subscribed_channels[slot_index].end_timestamp = update->end_timestamp;
-    
-    printf("[decoder] Actualizado slot %d: canal=%u, active=true, start=%llu, end=%llu\n",
-           slot_index, 
-           decoder_status.subscribed_channels[slot_index].id,
-           (unsigned long long)decoder_status.subscribed_channels[slot_index].start_timestamp,
-           (unsigned long long)decoder_status.subscribed_channels[slot_index].end_timestamp);
-    
-    // Persistir en flash
-    printf("[decoder] Borrando página de flash en dirección %X\n", (unsigned int)FLASH_STATUS_ADDR);
-    int erase_result = flash_simple_erase_page(FLASH_STATUS_ADDR);
-    if (erase_result != 0) {
-        printf("[decoder] Error al borrar flash: %d, restaurando estado previo\n", erase_result);
-        memcpy(&decoder_status, &backup_status, sizeof(flash_entry_t));
-        return -1;
-    }
-    
-    printf("[decoder] Escribiendo en flash: %d bytes\n", (int)sizeof(flash_entry_t));
+    // persist
+    flash_simple_erase_page(FLASH_STATUS_ADDR);
     int write_result = flash_simple_write(FLASH_STATUS_ADDR, &decoder_status, sizeof(flash_entry_t));
     if (write_result != 0) {
-        printf("[decoder] Error al escribir en flash: %d, restaurando estado previo\n", write_result);
-        memcpy(&decoder_status, &backup_status, sizeof(flash_entry_t));
+        printf("[decoder] Error al escribir en flash: %d\n", write_result);
         return -1;
     }
     
-    // Verificación especial para el canal 1
-    if (is_channel_one) {
-        printf("[decoder] Verificación especial para canal 1\n");
-        
-        // Leer de nuevo desde flash para verificar
-        flash_entry_t verify_status;
-        flash_simple_read(FLASH_STATUS_ADDR, &verify_status, sizeof(flash_entry_t));
-        
-        // Verificación especial para el canal 1
-    if (is_channel_one) {
-        printf("[decoder] Verificación especial para canal 1\n");
-        
-        // Leer de nuevo desde flash para verificar
-        flash_entry_t verify_status;
-        flash_simple_read(FLASH_STATUS_ADDR, &verify_status, sizeof(flash_entry_t));
-        
-        // Verificar que la suscripción se guardó correctamente
-        bool found = false;
-        for (int i = 0; i < MAX_CHANNEL_COUNT; i++) {
-            if (verify_status.subscribed_channels[i].active && 
-                verify_status.subscribed_channels[i].id == update->channel) {
-                printf("[decoder] Canal 1 verificado en flash: slot=%d, active=%d, start=%llu, end=%llu\n",
-                       i,
-                       verify_status.subscribed_channels[i].active ? 1 : 0,
-                       (unsigned long long)verify_status.subscribed_channels[i].start_timestamp,
-                       (unsigned long long)verify_status.subscribed_channels[i].end_timestamp);
-                found = true;
-                break;
-            }
-        }
-        
-        if (!found) {
-            printf("[decoder] ERROR CRÍTICO: Canal 1 no encontrado en verificación\n");
-            // Forzar una reescritura con varios intentos
-            for (int attempt = 0; attempt < 3 && !found; attempt++) {
-                printf("[decoder] Intento de reescritura %d para canal 1\n", attempt + 1);
-                flash_simple_erase_page(FLASH_STATUS_ADDR);
-                flash_simple_write(FLASH_STATUS_ADDR, &decoder_status, sizeof(flash_entry_t));
-                
-                // Volver a verificar
-                flash_simple_read(FLASH_STATUS_ADDR, &verify_status, sizeof(flash_entry_t));
-                for (int i = 0; i < MAX_CHANNEL_COUNT; i++) {
-                    if (verify_status.subscribed_channels[i].active && 
-                        verify_status.subscribed_channels[i].id == update->channel) {
-                        printf("[decoder] Canal 1 verificado después de reintento\n");
-                        found = true;
-                        break;
-                    }
-                }
-            }
-            
-            // Si aún no se pudo guardar, forzar en memoria
-            if (!found) {
-                printf("[decoder] ADVERTENCIA: No se pudo verificar en flash, forzando en memoria\n");
-                // Asegurarse de que esté en memoria aunque no se pueda guardar en flash
-                decoder_status.subscribed_channels[slot_index].active = true;
-                decoder_status.subscribed_channels[slot_index].id = update->channel;
-            }
+    // Verificar que se guardó correctamente
+    flash_entry_t verify_status;
+    flash_simple_read(FLASH_STATUS_ADDR, &verify_status, sizeof(flash_entry_t));
+    
+    // Verificar que la suscripción está activa para el canal solicitado
+    bool found = false;
+    for (i = 0; i < MAX_CHANNEL_COUNT; i++) {
+        if (verify_status.subscribed_channels[i].active && 
+            verify_status.subscribed_channels[i].id == update->channel) {
+            found = true;
+            printf("[decoder] Verificación: canal %u activado correctamente\n", update->channel);
+            break;
         }
     }
     
-    // Actualizar la memoria caché interna desde flash para asegurar consistencia
-    flash_simple_read(FLASH_STATUS_ADDR, &decoder_status, sizeof(decoder_status));
-    
-    // Confirmación final para canal 1
-    if (is_channel_one) {
-        printf("[decoder] Verificación final de canal 1 después de recarga:\n");
-        bool channel_one_active = false;
-        for (int i = 0; i < MAX_CHANNEL_COUNT; i++) {
-            if (decoder_status.subscribed_channels[i].active && 
-                decoder_status.subscribed_channels[i].id == 1) {
-                printf("[decoder] Confirmado: Canal 1 activo en slot %d\n", i);
-                channel_one_active = true;
-                break;
-            }
-        }
-        
-        if (!channel_one_active) {
-            printf("[decoder] FORZANDO MEMORIA: Canal 1 no está activo después de recarga\n");
-            // Última opción: forzar en memoria
-            for (int i = 0; i < MAX_CHANNEL_COUNT; i++) {
-                if (!decoder_status.subscribed_channels[i].active || 
-                    decoder_status.subscribed_channels[i].id == 1) {
-                    decoder_status.subscribed_channels[i].active = true;
-                    decoder_status.subscribed_channels[i].id = 1;
-                    decoder_status.subscribed_channels[i].start_timestamp = update->start_timestamp;
-                    decoder_status.subscribed_channels[i].end_timestamp = update->end_timestamp;
-                    printf("[decoder] Canal 1 forzado en memoria en slot %d\n", i);
-                    break;
-                }
-            }
-        }
+    if (!found) {
+        printf("[decoder] ADVERTENCIA: No se pudo verificar la suscripción al canal %u\n", update->channel);
     }
     
-    // Enviar respuesta de éxito
     write_packet(SUBSCRIBE_MSG, NULL, 0);
     return 0;
 }
@@ -820,5 +582,5 @@ int main(void) {
             break;
         }
     }
-    return 0;
+    return 0;
 }
