@@ -1,10 +1,10 @@
 /**
 * @file    decoder.c
 * @brief   Secure Decoder Implementation for eCTF design, con:
-*          - channel_keys en JSON (cargado en load_channel_keys())
+*          - channel_keys en JSON (cargado en load_secure_keys())
 *          - CMAC manual (RFC4493)
 *          - frames de 8 bytes + trailer(16) => 24 ciphertext en AES-CTR
-*          - suscripciÃ³n de 52 bytes
+*          - suscripción de 52 bytes
 *          - integra UART y flash subs, etc.
 */
 
@@ -32,7 +32,7 @@
 /* Header(20) = seq(4) + channel(4) + encoder_id(4) + ts_ext(8) */
 #define HEADER_SIZE      20
 
-/* SuscripciÃ³n(52) = 36 +16 cmac => SUBS_DATA_SIZE=36, SUBS_MAC_SIZE=16 */
+/* Suscripción(52) = 36 +16 cmac => SUBS_DATA_SIZE=36, SUBS_MAC_SIZE=16 */
 #define SUBS_DATA_SIZE   36
 #define SUBS_MAC_SIZE    16
 #define SUBS_TOTAL_SIZE  (SUBS_DATA_SIZE + SUBS_MAC_SIZE) // 52
@@ -42,13 +42,13 @@
 #define TRAILER_SIZE     16
 #define CIPHER_SIZE      (FRAME_SIZE + TRAILER_SIZE) // 24
 
-/* TamaÃ±o total del paquete esperado = 20 + 52 + 24 = 96 bytes */
+/* Tamaño total del paquete esperado = 20 + 52 + 24 = 96 bytes */
 #define PACKET_MIN_SIZE  (HEADER_SIZE + SUBS_TOTAL_SIZE + CIPHER_SIZE) // 96
 
 /* eCTF Subscriptions in flash */
 #define MAX_CHANNEL_COUNT 8
 #define EMERGENCY_CHANNEL 0
-#define DEFAULT_CHANNEL_TIMESTAMP 0xFFFFFFFFFFFFFFFF
+#define DEFAULT_CHANNEL_TIMESTAMP 0xFFFFFFFF  // ahora 32 bits
 #define FLASH_FIRST_BOOT 0xDEADBEEF
 #define FLASH_STATUS_ADDR ((MXC_FLASH_MEM_BASE + MXC_FLASH_MEM_SIZE) - (2 * MXC_FLASH_PAGE_SIZE))
 
@@ -60,24 +60,17 @@ typedef struct {
     uint8_t  data[FRAME_SIZE]; // 8 bytes de frame
 } frame_packet_t;
 
-/*typedef struct {
-    uint32_t decoder_id;
-    uint64_t start_timestamp;
-    uint64_t end_timestamp;
-    uint32_t channel;
-} subscription_update_packet_t;
-*/
+/* Se ha modificado la estructura para que contenga 32 bits para los timestamps */
 typedef struct {
     uint32_t channel;
-    uint64_t start_timestamp;
-    uint64_t end_timestamp;
+    uint32_t start_timestamp;
+    uint32_t end_timestamp;
 } subscription_update_packet_t;
-
 
 typedef struct {
     uint32_t channel;
-    uint64_t start;
-    uint64_t end;
+    uint32_t start;   // convertimos a 32 bits para comparación con el reference
+    uint32_t end;
 } channel_info_t;
 
 typedef struct {
@@ -89,9 +82,9 @@ typedef struct {
 /* Estructuras para flash */
 typedef struct {
     bool active;
-    uint32_t id;           
-    uint64_t start_timestamp;
-    uint64_t end_timestamp;
+    uint32_t id;
+    uint32_t start_timestamp;
+    uint32_t end_timestamp;
 } channel_status_t;
 
 typedef struct {
@@ -112,28 +105,19 @@ int list_channels(void);
 int update_subscription(uint16_t pkt_len, subscription_update_packet_t *update);
 
 /* -------------- ALMACENAMIENTO DE channel_keys --------------- */
-/* Sencillo: guardamos en un array estÃ¡tico */
-static uint8_t g_channel_key[32];  // usaremos una sola? o un map? 
-/* O si prefieres un diccionario para varios channels, etc. 
-Ajusta segun tu diseÃ±o. 
-*/
+/* Sencillo: guardamos en un array estático */
+static uint8_t g_channel_key[32];  // Usamos una sola clave, por ejemplo
 
 /* -------------- K_master o similar --------------- */
 static uint8_t G_K_MASTER[16];
 
 /* 
-FunciÃ³n de carga de "secure_decoder.json" 
+Función de carga de "secure_decoder.json" 
 con "channel_keys" (p. ej. "1": "base64..."), etc.
-AquÃ­ puedes parsear varios canales si lo requieres,
-o solo uno, segÃºn tu diseÃ±o.
 */
 int load_secure_keys(void) {
-    // Este es un placeholder
-    // Lo normal: parsear "secure_decoder.json", extraer base64 de "channel_keys",
-    // y guardarlo en un diccionario. 
-    // Por brevedad, se pone un mock
-    memset(G_K_MASTER, 0xAB, 16); // si lo usas
-    // g_channel_key con 32 bytes
+    // Placeholder: normalmente se parsearía el archivo JSON
+    memset(G_K_MASTER, 0xAB, 16);
     memset(g_channel_key, 0xCD, 32);
     return 0;
 }
@@ -293,75 +277,74 @@ static void store64_be(uint64_t val, uint8_t out[8])
 static int secure_process_packet(const uint8_t* packet, size_t packet_len,
                                 uint8_t** frame_out, size_t* frame_len_out)
 {
-printf("[decoder]  Iniciando procesamiento de paquete (%zu bytes)\n", packet_len);
-fflush(stdout);
+    printf("[decoder]  Iniciando procesamiento de paquete (%zu bytes)\n", packet_len);
+    fflush(stdout);
 
-if (packet_len < PACKET_MIN_SIZE) {
-    fprintf(stderr, "[decoder]  ERROR: Paquete demasiado corto\n");
-    return -1;
+    if (packet_len < PACKET_MIN_SIZE) {
+        fprintf(stderr, "[decoder]  ERROR: Paquete demasiado corto\n");
+        return -1;
+    }
+
+    uint32_t seq, channel, encoder_id;
+    uint64_t ts_ext;
+    memcpy(&seq, packet, 4);
+    memcpy(&channel, packet + 4, 4);
+    memcpy(&encoder_id, packet + 8, 4);
+    memcpy(&ts_ext, packet + 12, 8);
+
+    printf("[decoder]  Header => seq=%u, channel=%u, enc_id=%u, ts_ext=%llu\n",
+            seq, channel, encoder_id, (unsigned long long)ts_ext);
+    fflush(stdout);
+
+    // Extraer suscripción y validar CMAC
+    const uint8_t* subs_data = packet + HEADER_SIZE;  
+    const uint8_t* subs_mac  = subs_data + SUBS_DATA_SIZE; 
+
+    uint8_t calc_mac[16];
+    if (aes_cmac(g_channel_key, 16, subs_data, SUBS_DATA_SIZE, calc_mac) != 0) {
+        fprintf(stderr, "[decoder]  ERROR: CMAC de suscripción falló\n");
+        return -1;
+    }
+    if (memcmp(calc_mac, subs_mac, 16) != 0) {
+        fprintf(stderr, "[decoder] ERROR: CMAC inválido, posible manipulación\n");
+        return -1;
+    }
+    printf("[decoder]  CMAC de suscripción válido\n");
+    fflush(stdout);
+
+    // Derivar clave dinámica y descifrar
+    uint8_t dynamic_key[16];
+    uint8_t seq_channel[8];
+    memcpy(seq_channel, &seq, 4);
+    memcpy(seq_channel+4, &channel, 4);
+
+    if (aes_cmac(g_channel_key, 16, seq_channel, 8, dynamic_key) != 0) {
+        fprintf(stderr, "[decoder]  ERROR: No se pudo derivar dynamic_key\n");
+        return -1;
+    }
+    printf("[decoder]  Clave derivada correctamente\n");
+    fflush(stdout);
+
+    // Descifrar frame
+    size_t offset = HEADER_SIZE + SUBS_TOTAL_SIZE;
+    uint8_t* plaintext = (uint8_t*)malloc(CIPHER_SIZE);
+    if (!plaintext) return -1;
+    memcpy(plaintext, packet+offset, CIPHER_SIZE);
+
+    uint8_t nonce[16] = {0};
+    store64_be(seq, nonce+8);
+    aes_ctr_xcrypt(dynamic_key, 16, nonce, plaintext, CIPHER_SIZE);
+
+    *frame_out = (uint8_t*)malloc(FRAME_SIZE);
+    memcpy(*frame_out, plaintext, FRAME_SIZE);
+    free(plaintext);
+
+    printf("[decoder]  Descifrado exitoso\n");
+    fflush(stdout);
+
+    *frame_len_out = FRAME_SIZE;
+    return 0;
 }
-
-uint32_t seq, channel, encoder_id;
-uint64_t ts_ext;
-memcpy(&seq, packet, 4);
-memcpy(&channel, packet + 4, 4);
-memcpy(&encoder_id, packet + 8, 4);
-memcpy(&ts_ext, packet + 12, 8);
-
-printf("[decoder]  Header => seq=%u, channel=%u, enc_id=%u, ts_ext=%llu\n",
-        seq, channel, encoder_id, (unsigned long long)ts_ext);
-fflush(stdout);
-
-// Extraer suscripciÃ³n y validar CMAC
-const uint8_t* subs_data = packet + HEADER_SIZE;  
-const uint8_t* subs_mac  = subs_data + SUBS_DATA_SIZE; 
-
-uint8_t calc_mac[16];
-if (aes_cmac(g_channel_key, 16, subs_data, SUBS_DATA_SIZE, calc_mac) != 0) {
-    fprintf(stderr, "[decoder]  ERROR: CMAC de suscripciÃ³n fallÃ³\n");
-    return -1;
-}
-if (memcmp(calc_mac, subs_mac, 16) != 0) {
-    fprintf(stderr, "[decoder] ERROR: CMAC invÃ¡lido, posible manipulaciÃ³n\n");
-    return -1;
-}
-printf("[decoder]  CMAC de suscripciÃ³n vÃ¡lido\n");
-fflush(stdout);
-
-// Derivar clave dinÃ¡mica y descifrar
-uint8_t dynamic_key[16];
-uint8_t seq_channel[8];
-memcpy(seq_channel, &seq, 4);
-memcpy(seq_channel+4, &channel, 4);
-
-if (aes_cmac(g_channel_key, 16, seq_channel, 8, dynamic_key) != 0) {
-    fprintf(stderr, "[decoder]  ERROR: No se pudo derivar dynamic_key\n");
-    return -1;
-}
-printf("[decoder]  Clave derivada correctamente\n");
-fflush(stdout);
-
-// Descifrar frame
-size_t offset = HEADER_SIZE + SUBS_TOTAL_SIZE;
-uint8_t* plaintext = (uint8_t*)malloc(CIPHER_SIZE);
-if (!plaintext) return -1;
-memcpy(plaintext, packet+offset, CIPHER_SIZE);
-
-uint8_t nonce[16] = {0};
-store64_be(seq, nonce+8);
-aes_ctr_xcrypt(dynamic_key, 16, nonce, plaintext, CIPHER_SIZE);
-
-*frame_out = (uint8_t*)malloc(FRAME_SIZE);
-memcpy(*frame_out, plaintext, FRAME_SIZE);
-free(plaintext);
-
-printf("[decoder]  Descifrado exitoso\n");
-fflush(stdout);
-
-*frame_len_out = FRAME_SIZE;
-return 0;
-}
-
 
 /* -------------- decode() -> se usa al recibir DECODE_MSG -------------- */
 int decode(uint16_t pkt_len, uint8_t *encrypted_buf)
@@ -373,17 +356,9 @@ int decode(uint16_t pkt_len, uint8_t *encrypted_buf)
                                     &frame_plain, &frame_len);
     if (ret < 0) {
         STATUS_LED_RED();
-        print_error("DecodificaciÃ³n fallÃ³\n");
+        print_error("Decodificación falló\n");
         return -1;
     }
-
-    // e.g. parseamos el channel del header (o lo devuelves en secure_process_packet)
-    // supongamos no lo devolvimos => si quisiÃ©ramos, guardarlo en una var global
-    // ...
-    // Chequear si subscribed
-    // if(!is_subscribed(channel_decoded)) ...
-    // Por simplicidad, omitimos => o supÃ³n channel_decoded se extrajo
-
     // Retornamos el frame en claro al host
     write_packet(DECODE_MSG, frame_plain, (uint16_t)frame_len);
     free(frame_plain);
@@ -392,7 +367,6 @@ int decode(uint16_t pkt_len, uint8_t *encrypted_buf)
 
 /* -------------- is_subscribed() etc. -------------- */
 int is_subscribed(uint32_t channel) {
-    // Ejemplo de eCTF: emergency channel
     if (channel == EMERGENCY_CHANNEL) {
         return 1;
     }
@@ -436,7 +410,7 @@ int update_subscription(uint16_t pkt_len, subscription_update_packet_t *update) 
         print_error("Cannot subscribe to emergency channel\n");
         return -1;
     }
-    // find place in array
+    // Buscar un espacio libre o el canal existente
     int i;
     for (i = 0; i < MAX_CHANNEL_COUNT; i++) {
         if (!decoder_status.subscribed_channels[i].active ||
@@ -444,10 +418,9 @@ int update_subscription(uint16_t pkt_len, subscription_update_packet_t *update) 
         {
             decoder_status.subscribed_channels[i].active = true;
             decoder_status.subscribed_channels[i].id = update->channel;
-            decoder_status.subscribed_channels[i].start_timestamp =
-                update->start_timestamp;
-            decoder_status.subscribed_channels[i].end_timestamp =
-                update->end_timestamp;
+            // Convertir explícitamente a 32 bits
+            decoder_status.subscribed_channels[i].start_timestamp = (uint32_t) update->start_timestamp;
+            decoder_status.subscribed_channels[i].end_timestamp   = (uint32_t) update->end_timestamp;
             break;
         }
     }
@@ -456,7 +429,7 @@ int update_subscription(uint16_t pkt_len, subscription_update_packet_t *update) 
         print_error("Max subscriptions reached\n");
         return -1;
     }
-    // persist
+    // Persistir en flash
     flash_simple_erase_page(FLASH_STATUS_ADDR);
     flash_simple_write(FLASH_STATUS_ADDR, &decoder_status, sizeof(flash_entry_t));
     write_packet(SUBSCRIBE_MSG, NULL, 0);
@@ -465,15 +438,13 @@ int update_subscription(uint16_t pkt_len, subscription_update_packet_t *update) 
 
 /* -------------- init() -------------- */
 void init(void) {
-    //wolfSSL_Init();
-
     flash_simple_init();
     flash_simple_read(FLASH_STATUS_ADDR, &decoder_status, sizeof(decoder_status));
 
     if (decoder_status.first_boot != FLASH_FIRST_BOOT) {
         print_debug("First boot. Setting flash...\n");
         decoder_status.first_boot = FLASH_FIRST_BOOT;
-        for (int i=0; i<MAX_CHANNEL_COUNT; i++){
+        for (int i = 0; i < MAX_CHANNEL_COUNT; i++){
             decoder_status.subscribed_channels[i].active = false;
             decoder_status.subscribed_channels[i].start_timestamp = DEFAULT_CHANNEL_TIMESTAMP;
             decoder_status.subscribed_channels[i].end_timestamp   = DEFAULT_CHANNEL_TIMESTAMP;
@@ -483,13 +454,12 @@ void init(void) {
     }
 
     int ret = uart_init();
-    if (ret<0) {
+    if (ret < 0) {
         STATUS_LED_ERROR();
         while(1){}
     }
 
-    // cargar "secure_decoder.json" => channel_keys, etc.
-    if (load_secure_keys()!=0) {
+    if (load_secure_keys() != 0) {
         STATUS_LED_ERROR();
         print_error("Load secure keys error\n");
         while(1){}
@@ -501,7 +471,7 @@ int main(void) {
     init();
     print_debug("Decoder Booted!\n");
 
-    uint8_t  uart_buf[1024];
+    uint8_t uart_buf[1024];
     msg_type_t cmd;
     int result;
     uint16_t pkt_len;
@@ -511,31 +481,31 @@ int main(void) {
         STATUS_LED_GREEN();
 
         result = read_packet(&cmd, uart_buf, &pkt_len);
-        if (result<0) {
+        if (result < 0) {
             STATUS_LED_ERROR();
             print_error("Failed to receive cmd from host\n");
             continue;
         }
 
         switch(cmd) {
-        case LIST_MSG:
-            STATUS_LED_CYAN();
-            boot_flag();
-            list_channels();
-            break;
-        case DECODE_MSG:
-            STATUS_LED_PURPLE();
-            decode(pkt_len, uart_buf);
-            break;
-        case SUBSCRIBE_MSG:
-            STATUS_LED_YELLOW();
-            update_subscription(pkt_len, (subscription_update_packet_t*)uart_buf);
-            break;
-        default:
-            STATUS_LED_ERROR();
-            print_error("Invalid Command\n");
-            break;
+            case LIST_MSG:
+                STATUS_LED_CYAN();
+                boot_flag();
+                list_channels();
+                break;
+            case DECODE_MSG:
+                STATUS_LED_PURPLE();
+                decode(pkt_len, uart_buf);
+                break;
+            case SUBSCRIBE_MSG:
+                STATUS_LED_YELLOW();
+                update_subscription(pkt_len, (subscription_update_packet_t*)uart_buf);
+                break;
+            default:
+                STATUS_LED_ERROR();
+                print_error("Invalid Command\n");
+                break;
         }
     }
     return 0;
-} 
+}
