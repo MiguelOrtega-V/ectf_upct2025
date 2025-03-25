@@ -60,12 +60,19 @@ typedef struct {
     uint8_t  data[FRAME_SIZE]; // 8 bytes de frame
 } frame_packet_t;
 
-typedef struct {
+/*typedef struct {
     uint32_t decoder_id;
     uint64_t start_timestamp;
     uint64_t end_timestamp;
     uint32_t channel;
 } subscription_update_packet_t;
+*/
+typedef struct {
+    uint32_t channel;
+    uint64_t start_timestamp;
+    uint64_t end_timestamp;
+} subscription_update_packet_t;
+
 
 typedef struct {
     uint32_t channel;
